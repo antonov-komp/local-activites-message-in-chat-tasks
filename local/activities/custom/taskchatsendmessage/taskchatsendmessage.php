@@ -187,7 +187,7 @@ class CBPTaskChatSendMessage extends CBPActivity
         }
 
         return new CBPActivityPropertiesDialog(
-            __FILE__,
+            __DIR__ . '/.properties_dialog.php',
             [
                 'documentType' => $documentType,
                 'activityName' => $activityName,
