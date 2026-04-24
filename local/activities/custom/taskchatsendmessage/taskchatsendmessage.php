@@ -175,18 +175,13 @@ class CBPTaskChatSendMessage extends CBPActivity
         $currentValues = null,
         $formName = ''
     ) {
-        if (!is_array($currentValues)) {
-            $currentValues = [];
-            $activity = &CBPWorkflowTemplateLoader::FindActivityByName($workflowTemplate, $activityName);
-
-            if (is_array($activity) && is_array($activity['Properties'] ?? null)) {
-                $currentValues['task_id'] = (string)($activity['Properties']['TaskId'] ?? '');
-                $currentValues['sender_id'] = (string)($activity['Properties']['SenderId'] ?? '');
-                $currentValues['message_text'] = (string)($activity['Properties']['MessageText'] ?? '');
-            }
-        }
+        $currentValues = is_array($currentValues) ? $currentValues : [];
+        $currentValues['task_id'] = (string)($currentValues['task_id'] ?? '');
+        $currentValues['sender_id'] = (string)($currentValues['sender_id'] ?? '');
+        $currentValues['message_text'] = (string)($currentValues['message_text'] ?? '');
 
         return new CBPActivityPropertiesDialog(
+            __FILE__,
             [
                 'documentType' => $documentType,
                 'activityName' => $activityName,
@@ -252,3 +247,5 @@ class CBPTaskChatSendMessage extends CBPActivity
         $activity['Properties'] = $properties;
 
         return true;
+    }
+}
