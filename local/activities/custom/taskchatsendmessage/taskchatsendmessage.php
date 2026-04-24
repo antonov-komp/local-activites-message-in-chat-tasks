@@ -12,6 +12,9 @@ Loc::loadMessages(__FILE__);
 
 class CBPTaskChatSendMessage extends CBPActivity
 {
+    private const RESULT_SUCCESS = 'Y';
+    private const RESULT_FAIL = 'N';
+
     public function __construct($name)
     {
         parent::__construct($name);
@@ -21,71 +24,96 @@ class CBPTaskChatSendMessage extends CBPActivity
             'SenderId' => null,
             'MessageText' => '',
             'MessageId' => 0,
-            'IsSuccess' => 'N',
+            'IsSuccess' => self::RESULT_FAIL,
             'ErrorMessage' => '',
         ];
     }
 
     public function Execute()
     {
-        $this->setPropertyValue('MessageId', 0);
-        $this->setPropertyValue('IsSuccess', 'N');
-        $this->setPropertyValue('ErrorMessage', '');
+        $this->resetResultProperties();
 
         try {
             $this->ensureModulesLoaded();
 
             $taskId = $this->resolveTaskId();
             $senderId = $this->resolveSenderId();
-            $messageText = trim((string)$this->MessageText);
-
-            if ($messageText === '') {
-                throw new SystemException(Loc::getMessage('TASKCHATSENDMESSAGE_ERROR_EMPTY_MESSAGE'));
-            }
+            $messageText = $this->resolveMessageText();
 
             $chatId = $this->resolveChatId($taskId, $senderId);
             if ($chatId <= 0) {
                 throw new SystemException(Loc::getMessage('TASKCHATSENDMESSAGE_ERROR_CHAT_NOT_FOUND'));
             }
 
-            $messageId = (int)CIMChat::AddMessage([
-                'TO_CHAT_ID' => $chatId,
-                'FROM_USER_ID' => $senderId,
-                'MESSAGE' => $messageText,
-                'SYSTEM' => 'N',
-                'URL_PREVIEW' => 'Y',
-            ]);
-
-            if ($messageId <= 0) {
-                throw new SystemException(Loc::getMessage('TASKCHATSENDMESSAGE_ERROR_SEND_FAILED'));
-            }
-
-            $this->setPropertyValue('MessageId', $messageId);
-            $this->setPropertyValue('IsSuccess', 'Y');
-
-            $this->WriteToTrackingService(
-                Loc::getMessage('TASKCHATSENDMESSAGE_TRACKING_SUCCESS', [
-                    '#TASK_ID#' => $taskId,
-                    '#CHAT_ID#' => $chatId,
-                    '#MESSAGE_ID#' => $messageId,
-                ])
-            );
+            $messageId = $this->sendMessageToChat($chatId, $senderId, $messageText);
+            $this->markSuccess($taskId, $chatId, $messageId);
         } catch (\Throwable $exception) {
-            $errorMessage = $exception->getMessage();
-
-            $this->setPropertyValue('ErrorMessage', $errorMessage);
-            $this->setPropertyValue('IsSuccess', 'N');
-
-            $this->WriteToTrackingService(
-                Loc::getMessage('TASKCHATSENDMESSAGE_TRACKING_ERROR', [
-                    '#ERROR#' => $errorMessage,
-                ]),
-                0,
-                CBPTrackingType::Error
-            );
+            $this->markFailure($exception->getMessage());
         }
 
         return CBPActivityExecutionStatus::Closed;
+    }
+
+    protected function resetResultProperties(): void
+    {
+        $this->setPropertyValue('MessageId', 0);
+        $this->setPropertyValue('IsSuccess', self::RESULT_FAIL);
+        $this->setPropertyValue('ErrorMessage', '');
+    }
+
+    protected function resolveMessageText(): string
+    {
+        $messageText = trim((string)$this->MessageText);
+        if ($messageText === '') {
+            throw new SystemException(Loc::getMessage('TASKCHATSENDMESSAGE_ERROR_EMPTY_MESSAGE'));
+        }
+
+        return $messageText;
+    }
+
+    protected function sendMessageToChat(int $chatId, int $senderId, string $messageText): int
+    {
+        $messageId = (int)CIMChat::AddMessage([
+            'TO_CHAT_ID' => $chatId,
+            'FROM_USER_ID' => $senderId,
+            'MESSAGE' => $messageText,
+            'SYSTEM' => 'N',
+            'URL_PREVIEW' => 'Y',
+        ]);
+
+        if ($messageId <= 0) {
+            throw new SystemException(Loc::getMessage('TASKCHATSENDMESSAGE_ERROR_SEND_FAILED'));
+        }
+
+        return $messageId;
+    }
+
+    protected function markSuccess(int $taskId, int $chatId, int $messageId): void
+    {
+        $this->setPropertyValue('MessageId', $messageId);
+        $this->setPropertyValue('IsSuccess', self::RESULT_SUCCESS);
+
+        $this->WriteToTrackingService(
+            Loc::getMessage('TASKCHATSENDMESSAGE_TRACKING_SUCCESS', [
+                '#TASK_ID#' => $taskId,
+                '#CHAT_ID#' => $chatId,
+                '#MESSAGE_ID#' => $messageId,
+            ])
+        );
+    }
+
+    protected function markFailure(string $errorMessage): void
+    {
+        $this->setPropertyValue('ErrorMessage', $errorMessage);
+        $this->setPropertyValue('IsSuccess', self::RESULT_FAIL);
+
+        $this->WriteToTrackingService(
+            Loc::getMessage('TASKCHATSENDMESSAGE_TRACKING_ERROR', [
+                '#ERROR#' => $errorMessage,
+            ]),
+            0,
+            CBPTrackingType::Error
+        );
     }
 
     protected function ensureModulesLoaded(): void
@@ -121,17 +149,7 @@ class CBPTaskChatSendMessage extends CBPActivity
 
     protected function resolveSenderId(): int
     {
-        $sender = $this->SenderId;
-
-        if (is_array($sender)) {
-            $sender = reset($sender);
-        }
-
-        if (is_string($sender) && preg_match('/\d+/', $sender, $matches)) {
-            $sender = (int)$matches[0];
-        }
-
-        $senderId = (int)$sender;
+        $senderId = $this->extractUserId($this->SenderId);
         if ($senderId <= 0) {
             throw new SystemException(Loc::getMessage('TASKCHATSENDMESSAGE_ERROR_SENDER_ID'));
         }
@@ -142,6 +160,19 @@ class CBPTaskChatSendMessage extends CBPActivity
         }
 
         return $senderId;
+    }
+
+    protected function extractUserId($sender): int
+    {
+        if (is_array($sender)) {
+            $sender = reset($sender);
+        }
+
+        if (is_string($sender) && preg_match('/\d+/', $sender, $matches)) {
+            return (int)$matches[0];
+        }
+
+        return (int)$sender;
     }
 
     protected function resolveChatId(int $taskId, int $senderId): int
