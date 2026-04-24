@@ -165,4 +165,93 @@ class CBPTaskChatSendMessage extends CBPActivity
 
         return $chatId;
     }
+
+    public static function GetPropertiesDialog(
+        $documentType,
+        $activityName,
+        $workflowTemplate,
+        $workflowParameters,
+        $workflowVariables,
+        $currentValues = null,
+        $formName = ''
+    ) {
+        if (!is_array($currentValues)) {
+            $currentValues = [];
+            $activity = &CBPWorkflowTemplateLoader::FindActivityByName($workflowTemplate, $activityName);
+
+            if (is_array($activity) && is_array($activity['Properties'] ?? null)) {
+                $currentValues['task_id'] = (string)($activity['Properties']['TaskId'] ?? '');
+                $currentValues['sender_id'] = (string)($activity['Properties']['SenderId'] ?? '');
+                $currentValues['message_text'] = (string)($activity['Properties']['MessageText'] ?? '');
+            }
+        }
+
+        return new CBPActivityPropertiesDialog(
+            __DIR__ . '/.properties_dialog.php',
+            [
+                'documentType' => $documentType,
+                'activityName' => $activityName,
+                'workflowTemplate' => $workflowTemplate,
+                'workflowParameters' => $workflowParameters,
+                'workflowVariables' => $workflowVariables,
+                'currentValues' => $currentValues,
+                'formName' => $formName,
+            ]
+        );
+    }
+
+    public static function GetPropertiesDialogValues(
+        $documentType,
+        $activityName,
+        &$workflowTemplate,
+        &$workflowParameters,
+        &$workflowVariables,
+        $currentValues,
+        &$errors
+    ) {
+        $errors = [];
+
+        $taskId = trim((string)($currentValues['task_id'] ?? ''));
+        $senderId = trim((string)($currentValues['sender_id'] ?? ''));
+        $messageText = trim((string)($currentValues['message_text'] ?? ''));
+
+        if ($taskId === '') {
+            $errors[] = [
+                'code' => 'NotExist',
+                'parameter' => 'TaskId',
+                'message' => Loc::getMessage('TASKCHATSENDMESSAGE_ERROR_TASK_ID'),
+            ];
+        }
+
+        if ($senderId === '') {
+            $errors[] = [
+                'code' => 'NotExist',
+                'parameter' => 'SenderId',
+                'message' => Loc::getMessage('TASKCHATSENDMESSAGE_ERROR_SENDER_ID'),
+            ];
+        }
+
+        if ($messageText === '') {
+            $errors[] = [
+                'code' => 'NotExist',
+                'parameter' => 'MessageText',
+                'message' => Loc::getMessage('TASKCHATSENDMESSAGE_ERROR_EMPTY_MESSAGE'),
+            ];
+        }
+
+        if (!empty($errors)) {
+            return false;
+        }
+
+        $properties = [
+            'TaskId' => $taskId,
+            'SenderId' => $senderId,
+            'MessageText' => $messageText,
+        ];
+
+        $activity = &CBPWorkflowTemplateLoader::FindActivityByName($workflowTemplate, $activityName);
+        $activity['Properties'] = $properties;
+
+        return true;
+    }
 }
