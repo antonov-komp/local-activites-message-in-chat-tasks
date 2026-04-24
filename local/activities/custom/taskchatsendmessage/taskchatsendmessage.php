@@ -254,4 +254,3 @@ class CBPTaskChatSendMessage extends CBPActivity
 
         return true;
     }
-}
